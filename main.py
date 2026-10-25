@@ -312,16 +312,26 @@ async def health():
 
 @app.post("/v1/mailroom/actions")
 async def mailroom_actions(request: Request):
-    # The assignment uses one public endpoint for both proposal and commit operations.
+    # Dispatch the shared assignment endpoint without consuming the body twice.
     try:
-        body = await read_json(request)
-    except ValueError as exc:
-        return error(400, str(exc))
+        body_bytes = await request.body()
+        if len(body_bytes) > MAX_BODY_BYTES:
+            return error(413, "Request body exceeds 512 KiB.")
+        body = json.loads(body_bytes)
+        if not isinstance(body, dict):
+            return error(400, "JSON request body must be an object.")
+    except (json.JSONDecodeError, UnicodeDecodeError):
+        return error(400, "Request body must be valid JSON.")
     operation = body.get("operation")
+
+    async def replay_body():
+        return {"type": "http.request", "body": body_bytes, "more_body": False}
+
+    replay_request = Request(request.scope, replay_body)
     if operation == "propose":
-        return await propose(request)
+        return await propose(replay_request)
     if operation == "commit":
-        return await commit(request)
+        return await commit(replay_request)
     return error(400, "operation must be propose or commit.")
 
 
