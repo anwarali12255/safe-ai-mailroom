@@ -310,6 +310,21 @@ async def health():
     return {"ok": True}
 
 
+@app.post("/v1/mailroom/actions")
+async def mailroom_actions(request: Request):
+    # The assignment uses one public endpoint for both proposal and commit operations.
+    try:
+        body = await read_json(request)
+    except ValueError as exc:
+        return error(400, str(exc))
+    operation = body.get("operation")
+    if operation == "propose":
+        return await propose(request)
+    if operation == "commit":
+        return await commit(request)
+    return error(400, "operation must be propose or commit.")
+
+
 @app.post("/propose")
 async def propose(request: Request):
     started = time.monotonic()
